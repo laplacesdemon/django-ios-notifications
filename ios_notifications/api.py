@@ -57,20 +57,35 @@ class DeviceResource(BaseResource):
     def post(self, request, **kwargs):
         """
         Creates a new device or updates an existing one to `is_active=True`.
-        Expects two non-options POST parameters: `token` and `service`.
+        Expects one requires POST parameter: `token`.
+        And an optional one: `service`.
+        If service is not provided, it will use the 1st service on the list.
         """
-        token = request.POST.get('token')
+        post_values = request.POST.copy()
+
+        # add default service if not present
+        service_id = request.POST.get('service')
+        if service_id is None:
+            # fetch the 1st service
+            try:
+                from ios_notifications.models import APNService
+                service = APNService.objects.all()[0]
+                post_values['service'] = service.id
+            except:
+                pass
+
+        token = post_values.get('token')
         if token is not None:
             # Strip out any special characters that may be in the token
             token = re.sub('<|>|\s', '', token)
         devices = Device.objects.filter(token=token,
-                                        service__id=int(request.POST.get('service', 0)))
+                                        service__id=int(post_values.get('service', 0)))
         if devices.exists():
             device = devices.get()
             device.is_active = True
             device.save()
             return JSONResponse(device)
-        form = DeviceForm(request.POST)
+        form = DeviceForm(post_values)
         if form.is_valid():
             device = form.save(commit=False)
             device.is_active = True
